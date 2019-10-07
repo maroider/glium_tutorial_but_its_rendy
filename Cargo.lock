@@ -363,6 +363,7 @@ name = "glium_tutorial_but_its_rendy"
 version = "0.1.0"
 dependencies = [
  "env_logger 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "rendy 0.4.0 (git+https://github.com/amethyst/rendy?branch=release-0.4)",
