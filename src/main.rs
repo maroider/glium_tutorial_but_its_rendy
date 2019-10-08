@@ -67,7 +67,7 @@ fn main() {
         Event::EventsCleared => {
             graph.run(&mut factory, &mut families, &());
         }
-        _ => *control_flow = ControlFlow::Wait,
+        _ => {}
     });
 }
 
