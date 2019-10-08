@@ -161,13 +161,13 @@ where
                         0,
                         &[
                             Vertex {
+                                position: [-0.5, 0.5].into(),
+                            },
+                            Vertex {
                                 position: [0.0, -0.5].into(),
                             },
                             Vertex {
-                                position: [0.5, 0.5].into(),
-                            },
-                            Vertex {
-                                position: [-0.5, 0.5].into(),
+                                position: [0.5, 0.25].into(),
                             },
                         ],
                     )
