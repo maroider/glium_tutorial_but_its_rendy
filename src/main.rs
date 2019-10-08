@@ -1,11 +1,7 @@
-#![allow(unused_imports)]
-
 use rendy::{
-    command::{Families, QueueId, RenderPassEncoder},
+    command::{QueueId, RenderPassEncoder},
     factory::{Config, Factory},
-    graph::{
-        present::PresentNode, render::*, Graph, GraphBuilder, GraphContext, NodeBuffer, NodeImage,
-    },
+    graph::{present::PresentNode, render::*, GraphBuilder, GraphContext, NodeBuffer, NodeImage},
     hal,
     memory::Dynamic,
     resource::{Buffer, BufferInfo, DescriptorSetLayout, Escape, Handle},
