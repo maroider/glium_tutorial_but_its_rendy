@@ -226,16 +226,16 @@ impl AsAttribute for Position {
 
 lazy_static::lazy_static! {
     static ref VERTEX: SpirvShader = SourceShaderInfo::new(
-        include_str!("chapter2.shader.vert"),
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/chapter2.shader.vert").into(),
+        include_str!("02.shader.vert"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/02.shader.vert").into(),
         ShaderKind::Vertex,
         SourceLanguage::GLSL,
         "main",
     ).precompile().unwrap();
 
     static ref FRAGMENT: SpirvShader = SourceShaderInfo::new(
-        include_str!("chapter2.shader.frag"),
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/chapter2.shader.frag").into(),
+        include_str!("02.shader.frag"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/02.shader.frag").into(),
         ShaderKind::Fragment,
         SourceLanguage::GLSL,
         "main",

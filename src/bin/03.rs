@@ -283,16 +283,16 @@ const UNIFORM_LOCALS_SIZE: u64 = std::mem::size_of::<UniformLocals>() as u64;
 
 lazy_static::lazy_static! {
     static ref VERTEX: SpirvShader = SourceShaderInfo::new(
-        include_str!("chapter3.shader.vert"),
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/chapter3.shader.vert").into(),
+        include_str!("03.shader.vert"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/03.shader.vert").into(),
         ShaderKind::Vertex,
         SourceLanguage::GLSL,
         "main",
     ).precompile().unwrap();
 
     static ref FRAGMENT: SpirvShader = SourceShaderInfo::new(
-        include_str!("chapter3.shader.frag"),
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/chapter3.shader.frag").into(),
+        include_str!("03.shader.frag"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/03.shader.frag").into(),
         ShaderKind::Fragment,
         SourceLanguage::GLSL,
         "main",
