@@ -2,7 +2,7 @@
 
 layout(location = 0) in vec2 a_Pos;
 
-layout(set = 0, binding = 0) uniform Locals {
+layout(push_constant) uniform Locals {
     float t;
 };
 

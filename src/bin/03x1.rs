@@ -2,9 +2,9 @@ use rendy::{
     command::{QueueId, RenderPassEncoder},
     factory::{Config, Factory},
     graph::{present::PresentNode, render::*, GraphBuilder, GraphContext, NodeBuffer, NodeImage},
-    hal::{self, Device as _},
+    hal,
     memory::Dynamic,
-    resource::{Buffer, BufferInfo, DescriptorSet, DescriptorSetLayout, Escape, Handle},
+    resource::{Buffer, BufferInfo, DescriptorSetLayout, Escape, Handle},
     shader::{ShaderKind, SourceLanguage, SourceShaderInfo, SpirvReflection, SpirvShader},
     util::types::vertex::{AsAttribute, AsVertex, VertexFormat},
     vulkan::{Backend, Instance},
@@ -124,35 +124,7 @@ where
     ) -> Result<TutorialRenderPipeline<B>, failure::Error> {
         assert!(buffers.is_empty());
         assert!(images.is_empty());
-        assert_eq!(set_layouts.len(), 1);
-
-        let uniform_buffer = factory
-            .create_buffer(
-                BufferInfo {
-                    size: UNIFORM_LOCALS_SIZE,
-                    usage: hal::buffer::Usage::UNIFORM,
-                },
-                Dynamic,
-            )
-            .unwrap();
-
-        let descriptor_set = factory
-            .create_descriptor_set(set_layouts[0].clone())
-            .unwrap();
-
-        unsafe {
-            factory
-                .device()
-                .write_descriptor_sets(vec![hal::pso::DescriptorSetWrite {
-                    set: descriptor_set.raw(),
-                    binding: 0,
-                    array_offset: 0,
-                    descriptors: vec![hal::pso::Descriptor::Buffer(
-                        uniform_buffer.raw(),
-                        None..Some(UNIFORM_LOCALS_SIZE),
-                    )],
-                }])
-        };
+        assert!(set_layouts.is_empty());
 
         let vbuf_size = SHADER_REFLECTION.attributes_range(..).unwrap().stride as u64 * 3;
 
@@ -186,19 +158,13 @@ where
                 .unwrap();
         }
 
-        Ok(TutorialRenderPipeline {
-            uniform: uniform_buffer,
-            vertex: vbuf,
-            descriptor_set,
-        })
+        Ok(TutorialRenderPipeline { vertex: vbuf })
     }
 }
 
 #[derive(Debug)]
 struct TutorialRenderPipeline<B: hal::Backend> {
-    uniform: Escape<Buffer<B>>,
     vertex: Escape<Buffer<B>>,
-    descriptor_set: Escape<DescriptorSet<B>>,
 }
 
 impl<B> SimpleGraphicsPipeline<B, f32> for TutorialRenderPipeline<B>
@@ -209,18 +175,13 @@ where
 
     fn prepare(
         &mut self,
-        factory: &Factory<B>,
+        _factory: &Factory<B>,
         _queue: QueueId,
         _set_layouts: &[Handle<DescriptorSetLayout<B>>],
         _index: usize,
-        aux: &f32,
+        _aux: &f32,
     ) -> PrepareResult {
-        unsafe {
-            factory
-                .upload_visible_buffer(&mut self.uniform, 0, &[UniformLocals { t: *aux }])
-                .unwrap()
-        };
-        PrepareResult::DrawReuse
+        PrepareResult::DrawRecord
     }
 
     fn draw(
@@ -228,14 +189,14 @@ where
         layout: &B::PipelineLayout,
         mut encoder: RenderPassEncoder<'_, B>,
         _index: usize,
-        _aux: &f32,
+        aux: &f32,
     ) {
         unsafe {
-            encoder.bind_graphics_descriptor_sets(
+            encoder.push_constants(
                 layout,
+                hal::pso::ShaderStageFlags::VERTEX,
                 0,
-                std::iter::once(self.descriptor_set.raw()),
-                std::iter::empty(),
+                &[aux.to_bits()],
             );
             encoder.bind_vertex_buffers(0, Some((self.vertex.raw(), 0)));
             encoder.draw(0..3, 0..1);
@@ -273,26 +234,18 @@ impl AsAttribute for Position {
     const FORMAT: hal::format::Format = hal::format::Format::Rgb32Sfloat;
 }
 
-#[derive(Clone, Copy)]
-#[repr(C, align(16))]
-struct UniformLocals {
-    t: f32,
-}
-
-const UNIFORM_LOCALS_SIZE: u64 = std::mem::size_of::<UniformLocals>() as u64;
-
 lazy_static::lazy_static! {
     static ref VERTEX: SpirvShader = SourceShaderInfo::new(
-        include_str!("03.shader.vert"),
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/03.shader.vert").into(),
+        include_str!("03x1.shader.vert"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/03x1.shader.vert").into(),
         ShaderKind::Vertex,
         SourceLanguage::GLSL,
         "main",
     ).precompile().unwrap();
 
     static ref FRAGMENT: SpirvShader = SourceShaderInfo::new(
-        include_str!("03.shader.frag"),
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/03.shader.frag").into(),
+        include_str!("03x1.shader.frag"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/03x1.shader.frag").into(),
         ShaderKind::Fragment,
         SourceLanguage::GLSL,
         "main",
