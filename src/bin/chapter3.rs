@@ -2,9 +2,9 @@ use rendy::{
     command::{QueueId, RenderPassEncoder},
     factory::{Config, Factory},
     graph::{present::PresentNode, render::*, GraphBuilder, GraphContext, NodeBuffer, NodeImage},
-    hal,
+    hal::{self, Device as _},
     memory::Dynamic,
-    resource::{Buffer, BufferInfo, DescriptorSetLayout, Escape, Handle},
+    resource::{Buffer, BufferInfo, DescriptorSet, DescriptorSetLayout, Escape, Handle},
     shader::{ShaderKind, SourceLanguage, SourceShaderInfo, SpirvReflection, SpirvShader},
     util::types::vertex::{AsAttribute, AsVertex, VertexFormat},
     vulkan::{Backend, Instance},
@@ -35,7 +35,7 @@ fn main() {
         })
     };
 
-    let mut graph_builder = GraphBuilder::<Backend, ()>::new();
+    let mut graph_builder = GraphBuilder::<Backend, _>::new();
 
     let size = window.inner_size().to_physical(window.hidpi_factor());
 
@@ -55,8 +55,10 @@ fn main() {
 
     graph_builder.add_node(PresentNode::builder(&factory, surface, color).with_dependency(pass));
 
+    let mut t: f32 = -0.5;
+
     let mut graph = graph_builder
-        .build(&mut factory, &mut families, &())
+        .build(&mut factory, &mut families, &t)
         .unwrap();
 
     event_loop.run(move |event, _, control_flow| match event {
@@ -65,7 +67,12 @@ fn main() {
             window_id,
         } if window_id == window.id() => *control_flow = ControlFlow::Exit,
         Event::EventsCleared => {
-            graph.run(&mut factory, &mut families, &());
+            t += 0.0002;
+            if t > 0.5 {
+                t = -0.5;
+            }
+
+            graph.run(&mut factory, &mut families, &t);
         }
         _ => {}
     });
@@ -74,10 +81,9 @@ fn main() {
 #[derive(Debug, Default)]
 struct TutorialRenderPipelineDesc;
 
-impl<B, T> SimpleGraphicsPipelineDesc<B, T> for TutorialRenderPipelineDesc
+impl<B> SimpleGraphicsPipelineDesc<B, f32> for TutorialRenderPipelineDesc
 where
     B: hal::Backend,
-    T: ?Sized,
 {
     type Pipeline = TutorialRenderPipeline<B>;
 
@@ -85,7 +91,7 @@ where
         None
     }
 
-    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &T) -> rendy::shader::ShaderSet<B> {
+    fn load_shader_set(&self, factory: &mut Factory<B>, _aux: &f32) -> rendy::shader::ShaderSet<B> {
         SHADERS.build(factory, Default::default()).unwrap()
     }
 
@@ -102,33 +108,102 @@ where
             .gfx_vertex_input_desc(hal::pso::VertexInputRate::Vertex)]
     }
 
+    fn layout(&self) -> Layout {
+        SHADER_REFLECTION.layout().unwrap()
+    }
+
     fn build<'a>(
         self,
         _ctx: &GraphContext<B>,
-        _factory: &mut Factory<B>,
+        factory: &mut Factory<B>,
         _queue: QueueId,
-        _aux: &T,
+        _aux: &f32,
         buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
         set_layouts: &[Handle<DescriptorSetLayout<B>>],
     ) -> Result<TutorialRenderPipeline<B>, failure::Error> {
         assert!(buffers.is_empty());
         assert!(images.is_empty());
-        assert!(set_layouts.is_empty());
+        assert_eq!(set_layouts.len(), 1);
 
-        Ok(TutorialRenderPipeline { vertex: None })
+        let uniform_buffer = factory
+            .create_buffer(
+                BufferInfo {
+                    size: UNIFORM_LOCALS_SIZE,
+                    usage: hal::buffer::Usage::UNIFORM,
+                },
+                Dynamic,
+            )
+            .unwrap();
+
+        let descriptor_set = factory
+            .create_descriptor_set(set_layouts[0].clone())
+            .unwrap();
+
+        unsafe {
+            factory
+                .device()
+                .write_descriptor_sets(vec![hal::pso::DescriptorSetWrite {
+                    set: descriptor_set.raw(),
+                    binding: 0,
+                    array_offset: 0,
+                    descriptors: vec![hal::pso::Descriptor::Buffer(
+                        uniform_buffer.raw(),
+                        None..Some(UNIFORM_LOCALS_SIZE),
+                    )],
+                }])
+        };
+
+        let vbuf_size = SHADER_REFLECTION.attributes_range(..).unwrap().stride as u64 * 3;
+
+        let mut vbuf = factory
+            .create_buffer(
+                BufferInfo {
+                    size: vbuf_size,
+                    usage: hal::buffer::Usage::VERTEX,
+                },
+                Dynamic,
+            )
+            .unwrap();
+
+        unsafe {
+            factory
+                .upload_visible_buffer(
+                    &mut vbuf,
+                    0,
+                    &[
+                        Vertex {
+                            position: [-0.5, 0.5].into(),
+                        },
+                        Vertex {
+                            position: [0.0, -0.5].into(),
+                        },
+                        Vertex {
+                            position: [0.5, 0.25].into(),
+                        },
+                    ],
+                )
+                .unwrap();
+        }
+
+        Ok(TutorialRenderPipeline {
+            uniform: uniform_buffer,
+            vertex: vbuf,
+            descriptor_set,
+        })
     }
 }
 
 #[derive(Debug)]
 struct TutorialRenderPipeline<B: hal::Backend> {
-    vertex: Option<Escape<Buffer<B>>>,
+    uniform: Escape<Buffer<B>>,
+    vertex: Escape<Buffer<B>>,
+    descriptor_set: Escape<DescriptorSet<B>>,
 }
 
-impl<B, T> SimpleGraphicsPipeline<B, T> for TutorialRenderPipeline<B>
+impl<B> SimpleGraphicsPipeline<B, f32> for TutorialRenderPipeline<B>
 where
     B: hal::Backend,
-    T: ?Sized,
 {
     type Desc = TutorialRenderPipelineDesc;
 
@@ -138,62 +213,36 @@ where
         _queue: QueueId,
         _set_layouts: &[Handle<DescriptorSetLayout<B>>],
         _index: usize,
-        _aux: &T,
+        aux: &f32,
     ) -> PrepareResult {
-        if self.vertex.is_none() {
-            let vbuf_size = SHADER_REFLECTION.attributes_range(..).unwrap().stride as u64 * 3;
-
-            let mut vbuf = factory
-                .create_buffer(
-                    BufferInfo {
-                        size: vbuf_size,
-                        usage: hal::buffer::Usage::VERTEX,
-                    },
-                    Dynamic,
-                )
-                .unwrap();
-
-            unsafe {
-                factory
-                    .upload_visible_buffer(
-                        &mut vbuf,
-                        0,
-                        &[
-                            Vertex {
-                                position: [-0.5, 0.5].into(),
-                            },
-                            Vertex {
-                                position: [0.0, -0.5].into(),
-                            },
-                            Vertex {
-                                position: [0.5, 0.25].into(),
-                            },
-                        ],
-                    )
-                    .unwrap();
-            }
-
-            self.vertex = Some(vbuf);
-        }
-
+        unsafe {
+            factory
+                .upload_visible_buffer(&mut self.uniform, 0, &[UniformLocals { t: *aux }])
+                .unwrap()
+        };
         PrepareResult::DrawReuse
     }
 
     fn draw(
         &mut self,
-        _layout: &B::PipelineLayout,
+        layout: &B::PipelineLayout,
         mut encoder: RenderPassEncoder<'_, B>,
         _index: usize,
-        _aux: &T,
+        _aux: &f32,
     ) {
-        let vbuf = self.vertex.as_ref().unwrap();
         unsafe {
-            encoder.bind_vertex_buffers(0, Some((vbuf.raw(), 0)));
+            encoder.bind_graphics_descriptor_sets(
+                layout,
+                0,
+                std::iter::once(self.descriptor_set.raw()),
+                std::iter::empty(),
+            );
+            encoder.bind_vertex_buffers(0, Some((self.vertex.raw(), 0)));
             encoder.draw(0..3, 0..1);
         }
     }
 
-    fn dispose(self, _factory: &mut Factory<B>, _aux: &T) {}
+    fn dispose(self, _factory: &mut Factory<B>, _aux: &f32) {}
 }
 
 #[repr(C)]
@@ -224,18 +273,26 @@ impl AsAttribute for Position {
     const FORMAT: hal::format::Format = hal::format::Format::Rgb32Sfloat;
 }
 
+#[derive(Clone, Copy)]
+#[repr(C, align(16))]
+struct UniformLocals {
+    t: f32,
+}
+
+const UNIFORM_LOCALS_SIZE: u64 = std::mem::size_of::<UniformLocals>() as u64;
+
 lazy_static::lazy_static! {
     static ref VERTEX: SpirvShader = SourceShaderInfo::new(
-        include_str!("chapter2.shader.vert"),
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/chapter2.shader.vert").into(),
+        include_str!("chapter3.shader.vert"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/chapter3.shader.vert").into(),
         ShaderKind::Vertex,
         SourceLanguage::GLSL,
         "main",
     ).precompile().unwrap();
 
     static ref FRAGMENT: SpirvShader = SourceShaderInfo::new(
-        include_str!("chapter2.shader.frag"),
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/chapter2.shader.frag").into(),
+        include_str!("chapter3.shader.frag"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/chapter3.shader.frag").into(),
         ShaderKind::Fragment,
         SourceLanguage::GLSL,
         "main",
