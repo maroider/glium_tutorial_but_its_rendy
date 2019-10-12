@@ -217,7 +217,18 @@ where
     ) -> PrepareResult {
         unsafe {
             factory
-                .upload_visible_buffer(&mut self.uniform, 0, &[UniformLocals { t: *aux }])
+                .upload_visible_buffer(
+                    &mut self.uniform,
+                    0,
+                    &[UniformLocals {
+                        matrix: [
+                            [aux.cos(), aux.sin(), 0.0, 0.0],
+                            [-aux.sin(), aux.cos(), 0.0, 0.0],
+                            [0.0, 0.0, 1.0, 0.0],
+                            [0.0, 0.0, 0.0, 1.0],
+                        ],
+                    }],
+                )
                 .unwrap()
         };
         PrepareResult::DrawReuse
@@ -276,14 +287,14 @@ impl AsAttribute for Position {
 #[derive(Clone, Copy)]
 #[repr(C, align(16))]
 struct UniformLocals {
-    t: f32,
+    matrix: [[f32; 4]; 4],
 }
 
 const UNIFORM_LOCALS_SIZE: u64 = std::mem::size_of::<UniformLocals>() as u64;
 
 lazy_static::lazy_static! {
     static ref VERTEX: SpirvShader = SourceShaderInfo::new(
-        include_str!("03.shader.vert"),
+        include_str!("04.shader.vert"),
         concat!(env!("CARGO_MANIFEST_DIR"), "/src/03.shader.vert").into(),
         ShaderKind::Vertex,
         SourceLanguage::GLSL,
@@ -291,7 +302,7 @@ lazy_static::lazy_static! {
     ).precompile().unwrap();
 
     static ref FRAGMENT: SpirvShader = SourceShaderInfo::new(
-        include_str!("03.shader.frag"),
+        include_str!("04.shader.frag"),
         concat!(env!("CARGO_MANIFEST_DIR"), "/src/03.shader.frag").into(),
         ShaderKind::Fragment,
         SourceLanguage::GLSL,
