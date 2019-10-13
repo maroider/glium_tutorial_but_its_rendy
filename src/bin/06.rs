@@ -1,11 +1,14 @@
+use std::{fs::File, io::BufReader};
+
 use rendy::{
     command::{QueueId, RenderPassEncoder},
-    factory::{Config, Factory},
+    factory::{Config, Factory, ImageState},
     graph::{present::PresentNode, render::*, GraphBuilder, GraphContext, NodeBuffer, NodeImage},
     hal::{self, Device as _},
     memory::Dynamic,
     resource::{Buffer, BufferInfo, DescriptorSet, DescriptorSetLayout, Escape, Handle},
     shader::{ShaderKind, SourceLanguage, SourceShaderInfo, SpirvReflection, SpirvShader},
+    texture::{image::ImageTextureConfig, Texture},
     util::types::vertex::{AsAttribute, AsVertex, VertexFormat},
     vulkan::{Backend, Instance},
 };
@@ -110,13 +113,41 @@ where
 
     fn layout(&self) -> Layout {
         SHADER_REFLECTION.layout().unwrap()
+        // Layout {
+        //     sets: vec![SetLayout {
+        //         bindings: vec![
+        //             hal::pso::DescriptorSetLayoutBinding {
+        //                 binding: 0,
+        //                 ty: hal::pso::DescriptorType::UniformBuffer,
+        //                 count: 1,
+        //                 stage_flags: hal::pso::ShaderStageFlags::VERTEX,
+        //                 immutable_samplers: false,
+        //             },
+        //             hal::pso::DescriptorSetLayoutBinding {
+        //                 binding: 1,
+        //                 ty: hal::pso::DescriptorType::SampledImage,
+        //                 count: 1,
+        //                 stage_flags: hal::pso::ShaderStageFlags::FRAGMENT,
+        //                 immutable_samplers: false,
+        //             },
+        //             hal::pso::DescriptorSetLayoutBinding {
+        //                 binding: 2,
+        //                 ty: hal::pso::DescriptorType::Sampler,
+        //                 count: 1,
+        //                 stage_flags: hal::pso::ShaderStageFlags::FRAGMENT,
+        //                 immutable_samplers: false,
+        //             },
+        //         ],
+        //     }],
+        //     push_constants: Vec::new(),
+        // }
     }
 
     fn build<'a>(
         self,
         _ctx: &GraphContext<B>,
         factory: &mut Factory<B>,
-        _queue: QueueId,
+        queue: QueueId,
         _aux: &f32,
         buffers: Vec<NodeBuffer>,
         images: Vec<NodeImage>,
@@ -125,6 +156,31 @@ where
         assert!(buffers.is_empty());
         assert!(images.is_empty());
         assert_eq!(set_layouts.len(), 1);
+
+        let image_reader = BufReader::new(File::open("assets/opengl.png").map_err(|err| {
+            log::error!("Unable to open {}: {:?}", "assets/opengl.png", err);
+            hal::pso::CreationError::Other
+        })?);
+
+        let texture_builder = rendy::texture::image::load_from_image(
+            image_reader,
+            ImageTextureConfig {
+                generate_mips: true,
+                ..Default::default()
+            },
+        )?;
+
+        let texture = texture_builder
+            .build(
+                ImageState {
+                    queue,
+                    stage: hal::pso::PipelineStage::FRAGMENT_SHADER,
+                    access: hal::image::Access::SHADER_READ,
+                    layout: hal::image::Layout::ShaderReadOnlyOptimal,
+                },
+                factory,
+            )
+            .unwrap();
 
         let uniform_buffer = factory
             .create_buffer(
@@ -136,14 +192,15 @@ where
             )
             .unwrap();
 
+        dbg!(set_layouts);
+
         let descriptor_set = factory
             .create_descriptor_set(set_layouts[0].clone())
             .unwrap();
 
         unsafe {
-            factory
-                .device()
-                .write_descriptor_sets(vec![hal::pso::DescriptorSetWrite {
+            factory.device().write_descriptor_sets(vec![
+                hal::pso::DescriptorSetWrite {
                     set: descriptor_set.raw(),
                     binding: 0,
                     array_offset: 0,
@@ -151,7 +208,23 @@ where
                         uniform_buffer.raw(),
                         None..Some(UNIFORM_LOCALS_SIZE),
                     )],
-                }])
+                },
+                // hal::pso::DescriptorSetWrite {
+                //     set: descriptor_set.raw(),
+                //     binding: 1,
+                //     array_offset: 0,
+                //     descriptors: vec![hal::pso::Descriptor::Image(
+                //         texture.view().raw(),
+                //         hal::image::Layout::ShaderReadOnlyOptimal,
+                //     )],
+                // },
+                // hal::pso::DescriptorSetWrite {
+                //     set: descriptor_set.raw(),
+                //     binding: 2,
+                //     array_offset: 0,
+                //     descriptors: vec![hal::pso::Descriptor::Sampler(texture.sampler().raw())],
+                // },
+            ])
         };
 
         let vbuf_size = SHADER_REFLECTION.attributes_range(..).unwrap().stride as u64 * 3;
@@ -174,12 +247,15 @@ where
                     &[
                         Vertex {
                             position: [-0.5, 0.5].into(),
+                            tex_coords: [0.0, 0.0].into(),
                         },
                         Vertex {
                             position: [0.0, -0.5].into(),
+                            tex_coords: [0.0, 1.0].into(),
                         },
                         Vertex {
                             position: [0.5, 0.25].into(),
+                            tex_coords: [1.0, 0.0].into(),
                         },
                     ],
                 )
@@ -187,6 +263,7 @@ where
         }
 
         Ok(TutorialRenderPipeline {
+            texture,
             uniform: uniform_buffer,
             vertex: vbuf,
             descriptor_set,
@@ -196,6 +273,7 @@ where
 
 #[derive(Debug)]
 struct TutorialRenderPipeline<B: hal::Backend> {
+    texture: Texture<B>,
     uniform: Escape<Buffer<B>>,
     vertex: Escape<Buffer<B>>,
     descriptor_set: Escape<DescriptorSet<B>>,
@@ -260,11 +338,12 @@ where
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 struct Vertex {
     position: Position,
+    tex_coords: TexCoords,
 }
 
 impl AsVertex for Vertex {
     fn vertex() -> VertexFormat {
-        VertexFormat::new(Position::vertex())
+        VertexFormat::new((Position::vertex(), TexCoords::vertex()))
     }
 }
 
@@ -281,7 +360,23 @@ where
 }
 impl AsAttribute for Position {
     const NAME: &'static str = "position";
-    const FORMAT: hal::format::Format = hal::format::Format::Rgb32Sfloat;
+    const FORMAT: hal::format::Format = hal::format::Format::Rg32Sfloat;
+}
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct TexCoords(pub [f32; 2]);
+impl<T> From<T> for TexCoords
+where
+    T: Into<[f32; 2]>,
+{
+    fn from(from: T) -> Self {
+        TexCoords(from.into())
+    }
+}
+impl AsAttribute for TexCoords {
+    const NAME: &'static str = "tex_coords";
+    const FORMAT: hal::format::Format = hal::format::Format::Rg32Sfloat;
 }
 
 #[derive(Clone, Copy)]
@@ -294,16 +389,16 @@ const UNIFORM_LOCALS_SIZE: u64 = std::mem::size_of::<UniformLocals>() as u64;
 
 lazy_static::lazy_static! {
     static ref VERTEX: SpirvShader = SourceShaderInfo::new(
-        include_str!("05.shader.vert"),
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/05.shader.vert").into(),
+        include_str!("06.shader.vert"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/06.shader.vert").into(),
         ShaderKind::Vertex,
         SourceLanguage::GLSL,
         "main",
     ).precompile().unwrap();
 
     static ref FRAGMENT: SpirvShader = SourceShaderInfo::new(
-        include_str!("05.shader.frag"),
-        concat!(env!("CARGO_MANIFEST_DIR"), "/src/05.shader.frag").into(),
+        include_str!("06.shader.frag"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/src/06.shader.frag").into(),
         ShaderKind::Fragment,
         SourceLanguage::GLSL,
         "main",

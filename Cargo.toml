@@ -15,4 +15,4 @@ winit = "0.20.0-alpha3"
 git = "https://github.com/amethyst/rendy"
 branch = "release-0.4"
 default-features = false
-features = ["base", "shader-compiler", "spirv-reflection", "vulkan"]
+features = ["base", "shader-compiler", "spirv-reflection", "texture-image", "vulkan"]

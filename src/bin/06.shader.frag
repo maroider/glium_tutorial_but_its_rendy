@@ -1,8 +1,12 @@
 #version 450
 
-layout(location = 0) in vec2 my_attr;
+layout(location = 0) in vec2 tex_coords;
 layout(location = 0) out vec4 color;
 
+// layout(set = 0, binding = 1) uniform texture2D colormap;
+// layout(set = 0, binding = 2) uniform sampler colorsampler;
+
 void main() {
-    color = vec4(my_attr, 0.0, 1.0);
+    // color = texture(sampler2D(colormap, colorsampler), tex_coords);
+    color = vec4(tex_coords, 0.0, 1.0);
 }
