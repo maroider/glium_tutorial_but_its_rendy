@@ -112,35 +112,35 @@ where
     }
 
     fn layout(&self) -> Layout {
-        SHADER_REFLECTION.layout().unwrap()
-        // Layout {
-        //     sets: vec![SetLayout {
-        //         bindings: vec![
-        //             hal::pso::DescriptorSetLayoutBinding {
-        //                 binding: 0,
-        //                 ty: hal::pso::DescriptorType::UniformBuffer,
-        //                 count: 1,
-        //                 stage_flags: hal::pso::ShaderStageFlags::VERTEX,
-        //                 immutable_samplers: false,
-        //             },
-        //             hal::pso::DescriptorSetLayoutBinding {
-        //                 binding: 1,
-        //                 ty: hal::pso::DescriptorType::SampledImage,
-        //                 count: 1,
-        //                 stage_flags: hal::pso::ShaderStageFlags::FRAGMENT,
-        //                 immutable_samplers: false,
-        //             },
-        //             hal::pso::DescriptorSetLayoutBinding {
-        //                 binding: 2,
-        //                 ty: hal::pso::DescriptorType::Sampler,
-        //                 count: 1,
-        //                 stage_flags: hal::pso::ShaderStageFlags::FRAGMENT,
-        //                 immutable_samplers: false,
-        //             },
-        //         ],
-        //     }],
-        //     push_constants: Vec::new(),
-        // }
+        // SHADER_REFLECTION.layout().unwrap()
+        Layout {
+            sets: vec![SetLayout {
+                bindings: vec![
+                    hal::pso::DescriptorSetLayoutBinding {
+                        binding: 0,
+                        ty: hal::pso::DescriptorType::UniformBuffer,
+                        count: 1,
+                        stage_flags: hal::pso::ShaderStageFlags::VERTEX,
+                        immutable_samplers: false,
+                    },
+                    hal::pso::DescriptorSetLayoutBinding {
+                        binding: 1,
+                        ty: hal::pso::DescriptorType::SampledImage,
+                        count: 1,
+                        stage_flags: hal::pso::ShaderStageFlags::FRAGMENT,
+                        immutable_samplers: false,
+                    },
+                    hal::pso::DescriptorSetLayoutBinding {
+                        binding: 2,
+                        ty: hal::pso::DescriptorType::Sampler,
+                        count: 1,
+                        stage_flags: hal::pso::ShaderStageFlags::FRAGMENT,
+                        immutable_samplers: false,
+                    },
+                ],
+            }],
+            push_constants: Vec::new(),
+        }
     }
 
     fn build<'a>(
@@ -209,21 +209,21 @@ where
                         None..Some(UNIFORM_LOCALS_SIZE),
                     )],
                 },
-                // hal::pso::DescriptorSetWrite {
-                //     set: descriptor_set.raw(),
-                //     binding: 1,
-                //     array_offset: 0,
-                //     descriptors: vec![hal::pso::Descriptor::Image(
-                //         texture.view().raw(),
-                //         hal::image::Layout::ShaderReadOnlyOptimal,
-                //     )],
-                // },
-                // hal::pso::DescriptorSetWrite {
-                //     set: descriptor_set.raw(),
-                //     binding: 2,
-                //     array_offset: 0,
-                //     descriptors: vec![hal::pso::Descriptor::Sampler(texture.sampler().raw())],
-                // },
+                hal::pso::DescriptorSetWrite {
+                    set: descriptor_set.raw(),
+                    binding: 1,
+                    array_offset: 0,
+                    descriptors: vec![hal::pso::Descriptor::Image(
+                        texture.view().raw(),
+                        hal::image::Layout::ShaderReadOnlyOptimal,
+                    )],
+                },
+                hal::pso::DescriptorSetWrite {
+                    set: descriptor_set.raw(),
+                    binding: 2,
+                    array_offset: 0,
+                    descriptors: vec![hal::pso::Descriptor::Sampler(texture.sampler().raw())],
+                },
             ])
         };
 
