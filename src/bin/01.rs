@@ -1,12 +1,13 @@
 use rendy::{
-    factory::{Config, Factory},
+    factory::Config,
     graph::{
         present::PresentNode,
         render::{RenderPassNodeBuilder, SubpassBuilder},
         GraphBuilder,
     },
     hal,
-    vulkan::{Backend, Instance},
+    init::AnyWindowedRendy,
+    vulkan::Backend,
 };
 use winit::{
     event::{Event, WindowEvent},
@@ -20,49 +21,47 @@ fn main() {
         .init();
 
     let config: Config = Default::default();
-    let (mut factory, mut families): (Factory<Backend>, _) = rendy::factory::init(config).unwrap();
-
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_title("glium tutorial but it's rendy")
-        .build(&event_loop)
-        .unwrap();
+    let window = WindowBuilder::new().with_title("glium tutorial but it's rendy");
 
-    let surface = unsafe {
-        factory.create_surface_with(|instance: &Instance| {
-            instance.create_surface_from_raw(&window).unwrap()
-        })
-    };
+    let rendy = AnyWindowedRendy::init_auto(&config, window, &event_loop).unwrap();
+    rendy::with_any_windowed_rendy!((rendy)
+        (mut factory, mut families, surface, window) => {
+            let mut graph_builder = GraphBuilder::<Backend, ()>::new();
 
-    let mut graph_builder = GraphBuilder::<Backend, ()>::new();
+            let size = window.inner_size().to_physical(window.hidpi_factor());
 
-    let size = window.inner_size().to_physical(window.hidpi_factor());
+            let color = graph_builder.create_image(
+                hal::image::Kind::D2(size.width as u32, size.height as u32, 1, 1),
+                1,
+                factory.get_surface_format(&surface),
+                Some(
+                    hal::command::ClearValue {
+                        color: hal::command::ClearColor{ float32: [0.0, 0.0, 1.0, 1.0] },
+                    }
+                ),
+            );
 
-    let color = graph_builder.create_image(
-        hal::image::Kind::D2(size.width as u32, size.height as u32, 1, 1),
-        1,
-        factory.get_surface_format(&surface),
-        Some(hal::command::ClearValue::Color([0.0, 0.0, 1.0, 1.0].into())),
-    );
+            let pass = graph_builder.add_node(
+                RenderPassNodeBuilder::new().with_subpass(SubpassBuilder::new().with_color(color)),
+            );
 
-    let pass = graph_builder.add_node(
-        RenderPassNodeBuilder::new().with_subpass(SubpassBuilder::new().with_color(color)),
-    );
+            graph_builder.add_node(PresentNode::builder(&factory, surface, color).with_dependency(pass));
 
-    graph_builder.add_node(PresentNode::builder(&factory, surface, color).with_dependency(pass));
+            let mut graph = graph_builder
+            .build(&mut factory, &mut families, &())
+            .unwrap();
 
-    let mut graph = graph_builder
-        .build(&mut factory, &mut families, &())
-        .unwrap();
-
-    event_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            window_id,
-        } if window_id == window.id() => *control_flow = ControlFlow::Exit,
-        Event::EventsCleared => {
-            graph.run(&mut factory, &mut families, &());
+            event_loop.run(move |event, _, control_flow| match event {
+                Event::WindowEvent {
+                    event: WindowEvent::CloseRequested,
+                    window_id,
+                } if window_id == window.id() => *control_flow = ControlFlow::Exit,
+                Event::EventsCleared => {
+                    graph.run(&mut factory, &mut families, &());
+                }
+                _ => {}
+            });
         }
-        _ => {}
-    });
+    );
 }
