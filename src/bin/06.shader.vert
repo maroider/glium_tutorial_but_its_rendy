@@ -11,5 +11,4 @@ layout(set = 0, binding = 0) uniform _ {
 void main() {
     tex_coords_out = tex_coords;
     gl_Position = matrix * vec4(a_Pos, 0.0, 1.0);
-    // gl_Position = vec4(a_Pos, 0.0, 1.0);
 }

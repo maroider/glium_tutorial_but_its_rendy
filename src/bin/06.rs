@@ -67,6 +67,8 @@ fn main() {
                 window_id,
             } if window_id == window.id() => *control_flow = ControlFlow::Exit,
             Event::EventsCleared => {
+                factory.maintain(&mut families);
+
                 t += 0.0002;
                 if t > 0.5 {
                     t = -0.5;
@@ -155,10 +157,14 @@ where
         assert!(images.is_empty());
         assert_eq!(set_layouts.len(), 1);
 
-        let image_reader = BufReader::new(File::open("assets/opengl.png").map_err(|err| {
-            log::error!("Unable to open {}: {:?}", "assets/opengl.png", err);
-            hal::pso::CreationError::Other
-        })?);
+        let image_reader = BufReader::new(
+            File::open(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/opengl.png")).map_err(
+                |err| {
+                    log::error!("Unable to open {}: {:?}", "assets/opengl.png", err);
+                    hal::pso::CreationError::Other
+                },
+            )?,
+        );
 
         let texture_builder = rendy::texture::image::load_from_image(
             image_reader,
@@ -193,8 +199,6 @@ where
                 Dynamic,
             )
             .unwrap();
-
-        dbg!(set_layouts);
 
         let descriptor_set = factory
             .create_descriptor_set(set_layouts[0].clone())

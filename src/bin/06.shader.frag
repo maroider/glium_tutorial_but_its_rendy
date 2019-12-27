@@ -8,5 +8,4 @@ layout(set = 0, binding = 2) uniform sampler colorsampler;
 
 void main() {
     color = texture(sampler2D(colormap, colorsampler), tex_coords);
-    // color = vec4(tex_coords, 0.0, 1.0);
 }
